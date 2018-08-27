@@ -1,3 +1,4 @@
+import os
 import gensim
 import json
 import nltk
@@ -10,6 +11,9 @@ SOS_TOKEN = "<SOS>"
 EOS_TOKEN = "<EOS>"
 UNK_TOKEN = "<UNK>"
 USE_CUDA = True
+
+PROJECT_DIR = os.path.dirname(os.path.abspath('__file__'))
+TRAIN_DIR = PROJECT_DIR + "/tqa_dataset/train"
 
 def do_question_preprocess(question):
     return nltk.word_tokenize(question.lower())
@@ -54,3 +58,46 @@ def random_batch(raw_data, batch_size, dictionary, print_pair=False):
         target_var = target_var.cuda()
         
     return input_var, input_lengths, target_var, target_lengths
+
+def load_tqa_data():
+    tqa_tuple_path = TRAIN_DIR + '/tqa_v1_train.tqa_tuple'
+    raw_data = []
+    dictionary = gensim.corpora.Dictionary([[PAD_TOKEN], [SOS_TOKEN, EOS_TOKEN], [UNK_TOKEN]])  # assert <PAD> -> 0
+    with open(tqa_tuple_path, 'r', encoding='utf8') as fopen:
+        for line in fopen:
+            line_list = line.strip().split('\001')
+            para, question, cor_answer, answers_json, img_path = line_list
+            raw_data.append((para, question, cor_answer))
+            dictionary.add_documents([do_question_preprocess(para), do_question_preprocess(question), do_question_preprocess(cor_answer)])
+    return raw_data, dictionary
+
+def do_sort(seqs):
+    """
+    sort and store original index
+    #sort - #see http://stackoverflow.com/questions/2483696/undo-or-reverse-argsort-python
+    """
+    argsort = lambda _: sorted(range(len(_)), key=_.__getitem__, reverse=True)
+    original_lens = [len(seq) for seq in seqs]
+    sort_idx = argsort(original_lens)
+    undo_sort_idx = argsort(sort_idx)[::-1]
+
+    seqs_padded = [pad_seq(_, max(original_lens), dictionary) for _ in seqs]
+    seqs_var = Variable(torch.LongTensor(seqs_padded)[sort_idx])
+    seqs_lens = [original_lens[_] for _ in sort_idx]
+    return seqs_var, seqs_lens, undo_sort_idx
+
+def random_tqa_batch(raw_data, dictionary, batch_size):
+    paras = []
+    questions = []
+    answers = []
+    for i in range(batch_size):
+        p, q, a = random.choice(raw_data)
+        paras.append(indexes_from_sentence(dictionary, p))
+        questions.append(indexes_from_sentence(dictionary, q))
+        answers.append(indexes_from_sentence(dictionary, a))
+
+    # store original index, then sort & pad
+    para_var, para_lens, para_undo_sort_idx = do_sort(paras)
+    question_var, question_lens, question_undo_sort_idx = do_sort(questions)
+    
+    return para_var, para_lens, para_undo_sort_idx, question_var, question_lens, question_undo_sort_idx, answers

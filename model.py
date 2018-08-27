@@ -181,3 +181,18 @@ class LuongAttnDecoderRNN(nn.Module):
 
         # Return final output, hidden state, and attention weights (for visualization)
         return output, hidden, attn_weights
+
+
+class TextOnly(nn.module):
+    def __init__(self, voc_size, hidden_size, rnn_n_layers=1, dropout=0.1, bidirectional=True):
+        super(TextOnly, self).__init__()
+
+        self.voc_size = voc_size
+        self.hidden_size = hidden_size
+        self.n_layers = n_layers
+        self.dropout = dropout
+
+        self.embedding = nn.Embedding(voc_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=bidirectional)
+
+    def forward(self, ):
